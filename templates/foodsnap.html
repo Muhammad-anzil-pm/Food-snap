@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FoodSnap AI: Nutrition Tracker</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom font import for aesthetics */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* Light gray background */
+        }
+        
+        /* Custom style for the file drop area */
+        .drop-area {
+            border: 3px dashed #d1d5db; /* Gray dashed border */
+            transition: all 0.3s ease;
+        }
+
+        .drop-area.active {
+            border-color: #10b981; /* Green border when active/dragging */
+            background-color: #f0fff4; /* Light green background */
+        }
+        
+        /* Smooth fade in for content */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-start p-4 sm:p-6 md:p-10">
+
+    <div id="app-container" class="w-full max-w-4xl bg-white rounded-xl shadow-2xl p-6 sm:p-10 border border-gray-100 mb-10">
+
+        <!-- Header and Description -->
+        <header class="text-center mb-10">
+            <h1 class="text-4xl sm:text-5xl font-extrabold text-gray-900 tracking-tight">
+                <span class="text-green-600">FoodSnap</span> AI
+            </h1>
+            <p class="mt-3 text-lg text-gray-500 max-w-2xl mx-auto">
+                Instantly calculate nutrition and calories from a single food image.
+            </p>
+        </header>
+
+        <!-- Project Info Section -->
+        <section class="bg-gray-50 rounded-2xl p-8 border border-gray-100 mb-10">
+            <p class="text-gray-600 leading-relaxed mb-6">
+                <strong>FoodSnap AI</strong> is an advanced AI-powered tool designed to revolutionize personal nutrition tracking. By leveraging state-of-the-art machine learning models, this application bridges the gap between visual food data and nutritional science.
+            </p>
+            
+            <div>
+                <h4 class="font-bold text-gray-800 mb-2 flex items-center">
+                    Our Mission
+                </h4>
+                <p class="text-sm text-gray-600">
+                    To simplify health tracking by eliminating manual data entry. We aim to provide precise calorie and macronutrient estimates just by "snapping" a picture, making healthy living accessible to everyone.
+                </p>
+            </div>
+        </section>
+
+        <!-- Image Upload Section -->
+        <section class="mb-10">
+            <!-- IMPORTANT: Standard Form Submission for Flask render_template support -->
+            <form id="upload-form" action="/analyze_image" method="POST" enctype="multipart/form-data">
+                
+                <div id="drop-area" class="drop-area flex flex-col items-center justify-center p-8 rounded-xl cursor-pointer hover:border-green-400">
+                    <!-- Input must have name="file" to match Flask request.files['file'] -->
+                    <input type="file" id="image-upload" name="file" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
+                    
+                    <div class="text-6xl text-gray-300 mb-2">☁️</div>
+                    
+                    <p class="text-lg font-semibold text-gray-700">Drag & drop your food image here</p>
+                    <p class="text-sm text-gray-500 mt-1">or</p>
+                    
+                    <!-- Prevent default button behavior to ensure it triggers the file input click -->
+                    <button type="button"
+                        onclick="document.getElementById('image-upload').click();" 
+                        class="mt-4 px-6 py-2 bg-green-500 text-white font-medium rounded-lg shadow-md hover:bg-green-600 transition duration-150 transform hover:scale-[1.02]">
+                        Browse File
+                    </button>
+                </div>
+                
+                <div id="file-info" class="mt-4 hidden">
+                    <img id="image-preview" class="max-h-64 w-auto mx-auto rounded-lg object-contain border border-gray-200 shadow-md" alt="Image Preview" style="display:none;">
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit" id="analyze-button" 
+                    class="w-full mt-6 py-3 bg-indigo-600 text-white font-bold text-xl rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled>
+                    Analyze Food
+                </button>
+            </form>
+            
+            <!-- Loading Indicator (Initially Hidden) -->
+            <div id="loading-indicator" class="flex justify-center items-center py-6 hidden">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mr-3"></div>
+                <p class="text-lg text-indigo-600 font-medium">Processing image...</p>
+            </div>
+
+            <!-- Error/Message Box -->
+            <div id="message-box" class="mt-4 p-4 rounded-lg hidden fade-in" role="alert">
+                <p class="font-bold text-sm" id="message-title"></p>
+                <p id="message-content" class="text-sm"></p>
+            </div>
+        </section>
+
+    </div>
+
+    <script>
+        const form = document.getElementById('upload-form');
+        const dropArea = document.getElementById('drop-area');
+        const fileInput = document.getElementById('image-upload');
+        const analyzeButton = document.getElementById('analyze-button');
+        const fileInfoDiv = document.getElementById('file-info');
+        const imagePreview = document.getElementById('image-preview');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const messageBox = document.getElementById('message-box');
+        
+        // --- Drag and Drop Handlers ---
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        dropArea.addEventListener('dragenter', highlight, false);
+        dropArea.addEventListener('dragover', highlight, false);
+        dropArea.addEventListener('dragleave', unhighlight, false);
+        dropArea.addEventListener('drop', handleDrop, false);
+
+        function highlight() { dropArea.classList.add('active'); }
+        function unhighlight() { dropArea.classList.remove('active'); }
+
+        function handleDrop(e) {
+            unhighlight();
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            
+            if (files.length > 0) {
+                // Assign dropped files to the input element so they are sent with the form
+                fileInput.files = files;
+                processFile(files[0]);
+            }
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) processFile(file);
+        }
+
+        function processFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showMessage('The selected file is not an image. Please upload a JPEG or PNG file.', 'error');
+                return;
+            }
+
+            dropArea.classList.add('hidden');
+            fileInfoDiv.classList.remove('hidden');
+            analyzeButton.disabled = false;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                imagePreview.src = e.target.result;
+                imagePreview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+            messageBox.classList.add('hidden');
+        }
+
+        // --- Form Submission Handler ---
+        form.addEventListener('submit', function(e) {
+            // We do NOT preventDefault() here because we want the form to submit normally 
+            // to the Flask backend, which will then render the new page.
+            
+            // Just show loading state while the browser handles the upload
+            loadingIndicator.classList.remove('hidden');
+            analyzeButton.disabled = true;
+            analyzeButton.textContent = "Uploading...";
+            messageBox.classList.add('hidden');
+        });
+
+        function showMessage(message, type) {
+            messageBox.classList.remove('hidden', 'bg-red-100', 'border-red-400', 'text-red-700');
+            messageBox.classList.add('bg-red-100', 'border-red-400', 'text-red-700');
+            document.getElementById('message-title').textContent = 'Error:';
+            document.getElementById('message-content').textContent = message;
+        }
+    </script>
+</body>
+</html>

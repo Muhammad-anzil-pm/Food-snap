@@ -1,0 +1,17 @@
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# YOLO model weights
+foodsnap-ai/weights/
+*.pt
+
+# Virtual environments
+venv/
+.env/
+
+# OS files
+.DS_Store
